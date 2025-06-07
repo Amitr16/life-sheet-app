@@ -109,6 +109,7 @@ export const AuthProvider = ({ children }) => {
     updateProfile,
     clearError,
     isAuthenticated: !!user,
+    setError,
   };
 
   return (

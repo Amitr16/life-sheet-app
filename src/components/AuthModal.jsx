@@ -10,7 +10,7 @@ import { X, User, Mail, Lock, UserPlus } from 'lucide-react';
 import ApiService from '../services/api';
 
 const AuthModal = ({ isOpen, onClose }) => {
-  const { login, register, error, loading, clearError, setUser } = useAuth();
+  const { login, register, error, loading, clearError, setUser, setError } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
   const [socialLoading, setSocialLoading] = useState(null);
   
@@ -68,12 +68,12 @@ const AuthModal = ({ isOpen, onClose }) => {
   const handleGoogleLogin = async () => {
     setSocialLoading('google');
     try {
-      // For now, use demo OAuth for testing
-      const response = await ApiService.googleLoginDemo();
-      if (response.user) {
-        // Set user in context
-        setUser(response.user);
-        onClose();
+      // Use real OAuth flow: get the Google OAuth URL from backend and redirect
+      const response = await ApiService.initiateGoogleLogin();
+      if (response && response.oauth_url) {
+        window.location.href = response.oauth_url;
+      } else {
+        setError('Failed to initiate Google login.');
       }
     } catch (error) {
       console.error('Google login failed:', error);
