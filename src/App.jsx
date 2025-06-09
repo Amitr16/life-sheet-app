@@ -66,6 +66,16 @@ function LifeSheetApp() {
 
   // Calculate financials when form data, goals, or expenses change
   useEffect(() => {
+    if (formData.age) {
+      // Always generate chart data if age is present
+      generateChartData(
+        parseInt(formData.age) || 0,
+        formData.currentAnnualGrossIncome ? parseFloat(formData.currentAnnualGrossIncome) : null,
+        parseFloat(formData.totalAssetGrossMarketValue) || 0,
+        parseInt(formData.lifespanYears) || 85,
+        parseFloat(formData.incomeGrowthRate) || 0.06
+      )
+    }
     if (formData.age && formData.currentAnnualGrossIncome) {
       calculateFinancials()
     }
@@ -257,7 +267,6 @@ function LifeSheetApp() {
     const age = parseInt(formData.age) || 0
     const currentIncome = parseFloat(formData.currentAnnualGrossIncome) || 0
     const workTenure = parseInt(formData.workTenureYears) || 0
-    console.log('Work Tenure for chart:', workTenure)
     const assets = parseFloat(formData.totalAssetGrossMarketValue) || 0
     const liabilities = loans.reduce((sum, loan) => sum + (parseFloat(loan.amount) || 0), 0)
     const lifespan = parseInt(formData.lifespanYears) || 85
@@ -293,24 +302,32 @@ function LifeSheetApp() {
       currentNetworth,
       surplusDeficit
     })
-    
-    // Generate chart data
-    generateChartData(age, currentIncome, assets, workTenure, incomeGrowthRate)
   }
 
-  const generateChartData = (age, currentIncome, assets, workTenure, growthRate) => {
-    const data = []
-    const currentYear = new Date().getFullYear()
-    let income = currentIncome
-    for (let year = 0; year < workTenure; year++) {
+  const generateChartData = (age, currentIncome, assets, lifespan, growthRate) => {
+    const workTenure = parseInt(formData.workTenureYears) || 0;
+    const data = [];
+    const currentYear = new Date().getFullYear();
+    let income = currentIncome || 0;
+    for (let year = 0; year <= (lifespan - age); year++) {
+      let incomeValue = null;
+      if (currentIncome) {
+        if (workTenure > 0) {
+          incomeValue = year < workTenure ? Math.round(income) : 0;
+        } else {
+          incomeValue = year === 0 ? Math.round(income) : 0;
+        }
+      }
       data.push({
         year: currentYear + year,
         age: age + year,
-        income: Math.round(income)
-      })
-      income = income * (1 + growthRate)
+        income: incomeValue
+      });
+      if (workTenure > 0 && year < workTenure) {
+        income = income * (1 + growthRate);
+      }
     }
-    setChartData(data)
+    setChartData(data);
   }
 
   // Dynamic Goals Management
@@ -463,7 +480,7 @@ function LifeSheetApp() {
                 
                 {/* Core Financial Inputs */}
                 <div className="space-y-4">
-                  <div>
+                  <div className="border border-teal-300 rounded-lg p-3 bg-teal-50/30">
                     <Label htmlFor="age" className="text-sm font-medium text-gray-700">Age</Label>
                     <Input
                       id="age"
@@ -475,7 +492,7 @@ function LifeSheetApp() {
                     />
                   </div>
 
-                  <div>
+                  <div className="border border-teal-300 rounded-lg p-3 bg-teal-50/30">
                     <Label htmlFor="income" className="text-sm font-medium text-gray-700">
                       Current Annual Gross Income & Work Tenure
                     </Label>
@@ -496,7 +513,7 @@ function LifeSheetApp() {
                     </div>
                   </div>
 
-                  <div>
+                  <div className="border border-teal-300 rounded-lg p-3 bg-teal-50/30">
                     <Label htmlFor="assets" className="text-sm font-medium text-gray-700">
                       Total Asset Gross Market Value
                     </Label>
@@ -511,7 +528,7 @@ function LifeSheetApp() {
                   </div>
 
                   {/* Loans Section */}
-                  <div className="space-y-2">
+                  <div className="border border-teal-300 rounded-lg p-3 bg-teal-50/30">
                     <div className="flex items-center justify-between">
                       <Label className="text-sm font-medium text-gray-700">Outstanding Loans</Label>
                       <Button
@@ -560,7 +577,7 @@ function LifeSheetApp() {
                 </div>
 
                 {/* Dynamic Financial Goals */}
-                <div className="space-y-4">
+                <div className="border border-teal-300 rounded-lg p-3 bg-teal-50/30">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium text-gray-700">Specific Financial Goals</Label>
                     <Button
@@ -613,7 +630,7 @@ function LifeSheetApp() {
                 </div>
 
                 {/* Dynamic Annual Expenses */}
-                <div className="space-y-4">
+                <div className="border border-teal-300 rounded-lg p-3 bg-teal-50/30">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium text-gray-700">All Inclusive Annual Expenses</Label>
                     <Button
@@ -664,159 +681,89 @@ function LifeSheetApp() {
                     </div>
                   ))}
                 </div>
-
-                <Button
-                  onClick={() => {
-                    if (!isAuthenticated) {
-                      setShowAuthModal(true)
-                    } else {
-                      saveFinancialData()
-                    }
-                  }}
-                  className="w-full bg-gradient-to-r from-teal-500 to-green-500 hover:from-teal-600 hover:to-green-600 text-white font-medium py-3"
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Target className="w-4 h-4 mr-2" />
-                      Set Financial Goals
-                    </>
-                  )}
-                </Button>
               </CardContent>
             </Card>
           </div>
 
           {/* Right Column - Life Sheet Display */}
-          <div className="lg:col-span-2">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Life Sheet Summary */}
-              <Card className="shadow-lg border-0 bg-white/80 backdrop-blur">
-                <CardHeader className="bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-t-lg">
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Life Sheet</span>
-                    <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                      Surplus+ {formatCurrency(Math.abs(calculations.surplusDeficit))}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="grid grid-cols-2 gap-6">
-                    
-                    {/* Assets Column */}
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-600">Total Existing Assets</span>
-                        <span className="text-lg font-bold text-green-600">
-                          + {formatCurrency(calculations.totalExistingAssets)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-600">Total Human Capital</span>
-                        <span className="text-lg font-bold text-green-600">
-                          + {formatCurrency(calculations.totalHumanCapital)}
-                        </span>
-                      </div>
-                      
-                      <div className="border-t pt-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-bold text-gray-800">Total</span>
-                          <span className="text-xl font-bold text-green-600">
-                            + {formatCurrency(calculations.totalExistingAssets + calculations.totalHumanCapital)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Liabilities Column */}
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-600">Total Existing Liabilities</span>
-                        <span className="text-lg font-bold text-red-600">
-                          - {formatCurrency(calculations.totalExistingLiabilities)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-600">Total Future Expense</span>
-                        <span className="text-lg font-bold text-red-600">
-                          - {formatCurrency(calculations.totalFutureExpenses)}
-                        </span>
-                      </div>
-                      
-                      {/* Replace individual Financial Goals with Cumulative Financial Goal */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-600">Cumulative Financial Goal</span>
-                        <span className="text-lg font-bold text-red-600">
-                          - {formatCurrency(calculations.totalFinancialGoals)}
-                        </span>
-                      </div>
-                      
-                      <div className="border-t pt-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-bold text-gray-800">Total</span>
-                          <span className="text-xl font-bold text-red-600">
-                            - {formatCurrency(calculations.totalExistingLiabilities + calculations.totalFutureExpenses + calculations.totalFinancialGoals)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Detailed Breakdown */}
-              <Card className="shadow-lg border-0 bg-white/80 backdrop-blur">
-                <CardHeader className="bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-t-lg">
-                  <CardTitle>Heading</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">All Existing Assets:</span>
-                    <span className="font-semibold">{formatCurrency(calculations.totalExistingAssets)}</span>
-                  </div>
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            {/* Life Sheet Summary - now full width */}
+            <Card className="shadow-lg border-0 bg-white/80 backdrop-blur w-full">
+              <CardHeader className="bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-t-lg">
+                <CardTitle className="flex items-center justify-between">
+                  <span>Life Sheet</span>
+                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                    Surplus+ {formatCurrency(Math.abs(calculations.surplusDeficit))}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-2 gap-6">
                   
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">(Less) Existing Loans:</span>
-                    <span className="font-semibold text-red-600">-{formatCurrency(calculations.totalExistingLiabilities)}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Current Networth:</span>
-                    <span className="font-semibold">{formatCurrency(calculations.currentNetworth)}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">add: Future human Capital:</span>
-                    <span className="font-semibold text-green-600">+{formatCurrency(calculations.totalHumanCapital)}</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">(Less) Future Expenditures:</span>
-                    <span className="font-semibold text-red-600">-{formatCurrency(calculations.totalFutureExpenses)}</span>
-                  </div>
-                  
-                  <div className="border-t pt-4">
+                  {/* Assets Column */}
+                  <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold text-gray-800">Surplus/Deficit:</span>
-                      <span className={`text-xl font-bold ${calculations.surplusDeficit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(Math.abs(calculations.surplusDeficit))}
+                      <span className="text-sm font-medium text-gray-600">Total Existing Assets</span>
+                      <span className="text-lg font-bold text-green-600">
+                        + {formatCurrency(calculations.totalExistingAssets)}
                       </span>
                     </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">Total Human Capital</span>
+                      <span className="text-lg font-bold text-green-600">
+                        + {formatCurrency(calculations.totalHumanCapital)}
+                      </span>
+                    </div>
+                    
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-bold text-gray-800">Total</span>
+                        <span className="text-xl font-bold text-green-600">
+                          + {formatCurrency(calculations.totalExistingAssets + calculations.totalHumanCapital)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* Chart Section */}
-            <Card className="mt-6 shadow-lg border-0 bg-white/80 backdrop-blur">
+                  {/* Liabilities Column */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">Total Existing Liabilities</span>
+                      <span className="text-lg font-bold text-red-600">
+                        - {formatCurrency(calculations.totalExistingLiabilities)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">Total Future Expense</span>
+                      <span className="text-lg font-bold text-red-600">
+                        - {formatCurrency(calculations.totalFutureExpenses)}
+                      </span>
+                    </div>
+                    
+                    {/* Replace individual Financial Goals with Cumulative Financial Goal */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">Cumulative Financial Goal</span>
+                      <span className="text-lg font-bold text-red-600">
+                        - {formatCurrency(calculations.totalFinancialGoals)}
+                      </span>
+                    </div>
+                    
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-bold text-gray-800">Total</span>
+                        <span className="text-xl font-bold text-red-600">
+                          - {formatCurrency(calculations.totalExistingLiabilities + calculations.totalFutureExpenses + calculations.totalFinancialGoals)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Chart Section - now below Life Sheet */}
+            <Card className="mt-0 shadow-lg border-0 bg-white/80 backdrop-blur w-full">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <TrendingUp className="w-5 h-5 text-teal-600" />
