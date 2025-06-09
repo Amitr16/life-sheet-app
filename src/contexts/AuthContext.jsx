@@ -18,7 +18,13 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user is already logged in on app start
   useEffect(() => {
-    checkAuthStatus();
+    // Only check auth status if a token exists in localStorage or cookies
+    const hasToken = Boolean(localStorage.getItem('authToken'));
+    if (hasToken) {
+      checkAuthStatus();
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   const checkAuthStatus = async () => {

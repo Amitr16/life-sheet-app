@@ -17,6 +17,8 @@ function LifeSheetApp() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('');
+  const [saveError, setSaveError] = useState('');
   
   // Core financial data based on Excel analysis
   const [formData, setFormData] = useState({
@@ -80,6 +82,13 @@ function LifeSheetApp() {
       calculateFinancials()
     }
   }, [formData, goals, expenses, loans])
+
+  // Autosave on any field change if authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      saveFinancialData();
+    }
+  }, [formData, goals, expenses, loans]);
 
   const loadFinancialData = async () => {
     try {
@@ -219,11 +228,19 @@ function LifeSheetApp() {
           }
         }
         
-        alert('Financial data saved successfully!')
+        setSaveStatus('All changes saved');
+        setTimeout(() => setSaveStatus(''), 2000);
+        setSaveError('');
       }
     } catch (error) {
+      // Ignore NOT NULL constraint errors (expected for partial autosave)
+      if (error.message && error.message.includes('NOT NULL constraint failed')) {
+        setSaveError('');
+      } else {
+        setSaveError('Error saving data');
+        setTimeout(() => setSaveError(''), 3000);
+      }
       console.error('Error saving financial data:', error)
-      alert('Error saving data: ' + error.message)
     } finally {
       setSaving(false)
     }
@@ -399,6 +416,18 @@ function LifeSheetApp() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Saved status indicator */}
+      {saveStatus && (
+        <div style={{position: 'fixed', top: 16, right: 24, zIndex: 1000}} className="bg-green-100 text-green-700 px-4 py-2 rounded shadow transition-opacity duration-500">
+          {saveStatus}
+        </div>
+      )}
+      {/* Error status indicator */}
+      {saveError && (
+        <div style={{position: 'fixed', top: 56, right: 24, zIndex: 1000}} className="bg-red-100 text-red-700 px-4 py-2 rounded shadow transition-opacity duration-500">
+          {saveError}
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -414,23 +443,6 @@ function LifeSheetApp() {
               {isAuthenticated ? (
                 <>
                   <span className="text-sm text-gray-600">Welcome, {user?.username || user?.email}!</span>
-                  <Button
-                    onClick={saveFinancialData}
-                    disabled={saving}
-                    className="bg-teal-600 hover:bg-teal-700"
-                  >
-                    {saving ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save Data
-                      </>
-                    )}
-                  </Button>
                   <Button
                     onClick={handleLogout}
                     variant="outline"
@@ -489,6 +501,7 @@ function LifeSheetApp() {
                       value={formData.age}
                       onChange={(e) => setFormData({...formData, age: e.target.value})}
                       className="mt-1"
+                      onBlur={() => isAuthenticated && saveFinancialData()}
                     />
                   </div>
 
@@ -503,12 +516,14 @@ function LifeSheetApp() {
                         placeholder="Rs. XX,XXX"
                         value={formData.currentAnnualGrossIncome}
                         onChange={(e) => setFormData({...formData, currentAnnualGrossIncome: e.target.value})}
+                        onBlur={() => isAuthenticated && saveFinancialData()}
                       />
                       <Input
                         type="number"
                         placeholder="XX years"
                         value={formData.workTenureYears}
                         onChange={(e) => setFormData({...formData, workTenureYears: e.target.value})}
+                        onBlur={() => isAuthenticated && saveFinancialData()}
                       />
                     </div>
                   </div>
@@ -524,6 +539,7 @@ function LifeSheetApp() {
                       value={formData.totalAssetGrossMarketValue}
                       onChange={(e) => setFormData({...formData, totalAssetGrossMarketValue: e.target.value})}
                       className="mt-1"
+                      onBlur={() => isAuthenticated && saveFinancialData()}
                     />
                   </div>
 
@@ -554,6 +570,7 @@ function LifeSheetApp() {
                           value={loan.description}
                           onChange={e => updateLoan(idx, 'description', e.target.value)}
                           className="w-1/2"
+                          onBlur={() => isAuthenticated && saveFinancialData()}
                         />
                         <Input
                           type="number"
@@ -561,6 +578,7 @@ function LifeSheetApp() {
                           value={loan.amount}
                           onChange={e => updateLoan(idx, 'amount', parseFloat(e.target.value) || 0)}
                           className="w-1/2"
+                          onBlur={() => isAuthenticated && saveFinancialData()}
                         />
                         <Button
                           type="button"
@@ -617,6 +635,7 @@ function LifeSheetApp() {
                         value={goal.description || ''}
                         onChange={(e) => updateGoal(index, 'description', e.target.value)}
                         className="text-sm"
+                        onBlur={() => isAuthenticated && saveFinancialData()}
                       />
                       <Input
                         type="number"
@@ -624,6 +643,7 @@ function LifeSheetApp() {
                         value={goal.amount || ''}
                         onChange={(e) => updateGoal(index, 'amount', parseFloat(e.target.value) || 0)}
                         className="text-sm"
+                        onBlur={() => isAuthenticated && saveFinancialData()}
                       />
                     </div>
                   ))}
@@ -670,6 +690,7 @@ function LifeSheetApp() {
                         value={expense.description || ''}
                         onChange={(e) => updateExpense(index, 'description', e.target.value)}
                         className="text-sm"
+                        onBlur={() => isAuthenticated && saveFinancialData()}
                       />
                       <Input
                         type="number"
@@ -677,6 +698,7 @@ function LifeSheetApp() {
                         value={expense.amount || ''}
                         onChange={(e) => updateExpense(index, 'amount', parseFloat(e.target.value) || 0)}
                         className="text-sm"
+                        onBlur={() => isAuthenticated && saveFinancialData()}
                       />
                     </div>
                   ))}
