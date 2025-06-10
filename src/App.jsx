@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import AuthModal from './components/AuthModal'
 import ApiService from './services/api'
 import './App.css'
+import { v4 as uuidv4 } from 'uuid'
 
 function LifeSheetApp() {
   const { user, logout, isAuthenticated } = useAuth()
@@ -61,7 +62,12 @@ function LifeSheetApp() {
     if (isAuthenticated && user) {
       loadFinancialData()
       ApiService.getFinancialLoans(user.id).then(res => {
-        setLoans(res.loans || [])
+        setLoans(
+          (res.loans || []).map(loan => ({
+            ...loan,
+            description: loan.name // Map backend 'name' to frontend 'description'
+          }))
+        );
       })
     }
   }, [isAuthenticated, user])
@@ -246,12 +252,13 @@ function LifeSheetApp() {
             };
             console.log('Creating loan:', payload);
             const createdLoan = await ApiService.createFinancialLoan(payload);
-            // Update the local loan with the returned id and clear isNew
+            // Update the local loan with the returned id, clear isNew and _tempId
             updatedLoans[i] = {
               ...loan,
-              id: createdLoan.loan?.id || createdLoan.id, // handle both possible response shapes
+              id: createdLoan.loan?.id || createdLoan.id,
               isNew: false
             };
+            delete updatedLoans[i]._tempId;
           }
         }
         setLoans(updatedLoans);
@@ -435,25 +442,32 @@ function LifeSheetApp() {
 
   // 2. Add loan CRUD handlers using backend
   const addLoan = () => {
-    setLoans([...loans, { description: '', amount: 0, isNew: true }]);
+    setLoans([
+      ...loans,
+      { description: '', amount: '', isNew: true, _tempId: uuidv4() }
+    ]);
   }
-  const updateLoan = (index, field, value) => {
-    const updatedLoans = [...loans]
-    updatedLoans[index] = { ...updatedLoans[index], [field]: value }
-    setLoans(updatedLoans)
+  const updateLoan = (loanKey, field, value) => {
+    setLoans(loans => loans.map(loan =>
+      (loan.id === loanKey || loan._tempId === loanKey)
+        ? { ...loan, [field]: value }
+        : loan
+    ));
   }
-  const removeLoan = async (index) => {
-    const loanToRemove = loans[index];
-    if (loanToRemove.id) {
+  const removeLoan = async (loanKey) => {
+    const loanToRemove = loans.find(
+      (loan) => loan.id === loanKey || loan._tempId === loanKey
+    );
+    if (loanToRemove && loanToRemove.id) {
       try {
         await ApiService.deleteFinancialLoan(loanToRemove.id);
       } catch (error) {
         console.error('Failed to delete loan from backend:', error);
-        // Optionally, show an error to the user here
       }
     }
-    const updatedLoans = loans.filter((_, i) => i !== index);
-    setLoans(updatedLoans);
+    setLoans(loans => loans.filter(
+      (loan) => (loan.id || loan._tempId) !== loanKey
+    ));
   }
 
   const formatCurrency = (amount) => {
@@ -616,12 +630,12 @@ function LifeSheetApp() {
                       </div>
                     )}
                     {loans.map((loan, idx) => (
-                      <div key={idx} className="flex items-center gap-2 mb-2">
+                      <div key={loan.id || loan._tempId} className="flex items-center gap-2 mb-2">
                         <Input
                           type="text"
                           placeholder={`Loan ${idx + 1} Name`}
-                          value={loan.description}
-                          onChange={e => updateLoan(idx, 'description', e.target.value)}
+                          value={loan.description || ''}
+                          onChange={e => updateLoan(loan.id || loan._tempId, 'description', e.target.value)}
                           className="w-1/2"
                           onBlur={() => isAuthenticated && saveFinancialData()}
                         />
@@ -631,7 +645,7 @@ function LifeSheetApp() {
                           value={loan.amount === "" ? "" : loan.amount}
                           onChange={e => {
                             const val = e.target.value;
-                            updateLoan(idx, 'amount', val === "" ? "" : parseFloat(val));
+                            updateLoan(loan.id || loan._tempId, 'amount', val === "" ? "" : parseFloat(val));
                           }}
                           className="w-1/2"
                           onBlur={() => isAuthenticated && saveFinancialData()}
@@ -640,7 +654,7 @@ function LifeSheetApp() {
                           type="button"
                           size="icon"
                           variant="ghost"
-                          onClick={() => removeLoan(idx)}
+                          onClick={() => removeLoan(loan.id || loan._tempId)}
                           className="text-red-500"
                         >
                           <Trash2 className="w-4 h-4" />
