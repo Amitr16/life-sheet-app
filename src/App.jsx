@@ -11,7 +11,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import AuthModal from './components/AuthModal'
 import ApiService from './services/api'
 import './App.css'
-import { v4 as uuidv4 } from 'uuid'
 
 function LifeSheetApp() {
   const { user, logout, isAuthenticated } = useAuth()
@@ -444,20 +443,25 @@ function LifeSheetApp() {
   const addLoan = () => {
     setLoans([
       ...loans,
-      { description: '', amount: '', isNew: true, _tempId: uuidv4() }
+      { description: '', amount: '', isNew: true }
     ]);
   }
+
   const updateLoan = (loanKey, field, value) => {
-    setLoans(loans => loans.map(loan =>
-      (loan.id === loanKey || loan._tempId === loanKey)
+    setLoans(loans => loans.map((loan, idx) =>
+      (loan.id ? loan.id === loanKey : idx === loanKey)
         ? { ...loan, [field]: value }
         : loan
     ));
   }
+
   const removeLoan = async (loanKey) => {
-    const loanToRemove = loans.find(
-      (loan) => loan.id === loanKey || loan._tempId === loanKey
-    );
+    let loanToRemove;
+    if (typeof loanKey === 'number') {
+      loanToRemove = loans[loanKey];
+    } else {
+      loanToRemove = loans.find(loan => loan.id === loanKey);
+    }
     if (loanToRemove && loanToRemove.id) {
       try {
         await ApiService.deleteFinancialLoan(loanToRemove.id);
@@ -465,8 +469,8 @@ function LifeSheetApp() {
         console.error('Failed to delete loan from backend:', error);
       }
     }
-    setLoans(loans => loans.filter(
-      (loan) => (loan.id || loan._tempId) !== loanKey
+    setLoans(loans => loans.filter((loan, idx) =>
+      loan.id ? loan.id !== loanKey : idx !== loanKey
     ));
   }
 
@@ -630,12 +634,12 @@ function LifeSheetApp() {
                       </div>
                     )}
                     {loans.map((loan, idx) => (
-                      <div key={loan.id || loan._tempId} className="flex items-center gap-2 mb-2">
+                      <div key={loan.id ?? idx} className="flex items-center gap-2 mb-2">
                         <Input
                           type="text"
                           placeholder={`Loan ${idx + 1} Name`}
                           value={loan.description || ''}
-                          onChange={e => updateLoan(loan.id || loan._tempId, 'description', e.target.value)}
+                          onChange={e => updateLoan(loan.id ?? idx, 'description', e.target.value)}
                           className="w-1/2"
                           onBlur={() => isAuthenticated && saveFinancialData()}
                         />
@@ -645,7 +649,7 @@ function LifeSheetApp() {
                           value={loan.amount === "" ? "" : loan.amount}
                           onChange={e => {
                             const val = e.target.value;
-                            updateLoan(loan.id || loan._tempId, 'amount', val === "" ? "" : parseFloat(val));
+                            updateLoan(loan.id ?? idx, 'amount', val === "" ? "" : parseFloat(val));
                           }}
                           className="w-1/2"
                           onBlur={() => isAuthenticated && saveFinancialData()}
@@ -654,7 +658,7 @@ function LifeSheetApp() {
                           type="button"
                           size="icon"
                           variant="ghost"
-                          onClick={() => removeLoan(loan.id || loan._tempId)}
+                          onClick={() => removeLoan(loan.id ?? idx)}
                           className="text-red-500"
                         >
                           <Trash2 className="w-4 h-4" />
