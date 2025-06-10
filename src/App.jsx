@@ -83,13 +83,6 @@ function LifeSheetApp() {
     }
   }, [formData, goals, expenses, loans])
 
-  // Autosave on any field change if authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      saveFinancialData();
-    }
-  }, [formData, goals, expenses, loans]);
-
   const loadFinancialData = async () => {
     try {
       setLoading(true)
@@ -190,43 +183,78 @@ function LifeSheetApp() {
         setFinancialProfile(profileResponse.profile)
         
         // Save goals and expenses separately
-        for (const goal of goals) {
-          if (goal.id) {
-            await ApiService.updateFinancialGoal(goal.id, goal)
+        const updatedGoals = [...goals];
+        for (let i = 0; i < updatedGoals.length; i++) {
+          const goal = updatedGoals[i];
+          if (goal.id && !goal.isNew) {
+            console.log('Updating goal:', goal);
+            await ApiService.updateFinancialGoal(goal.id, goal);
           } else {
-            await ApiService.createFinancialGoal({
+            const payload = {
               user_id: user.id,
               profile_id: profileResponse.profile.id,
               ...goal
-            })
+            };
+            console.log('Creating goal:', payload);
+            const createdGoal = await ApiService.createFinancialGoal(payload);
+            updatedGoals[i] = {
+              ...goal,
+              id: createdGoal.goal?.id || createdGoal.id,
+              isNew: false
+            };
           }
         }
-        
-        for (const expense of expenses) {
-          if (expense.id) {
-            await ApiService.updateFinancialExpense(expense.id, expense)
+        setGoals(updatedGoals);
+
+        const updatedExpenses = [...expenses];
+        for (let i = 0; i < updatedExpenses.length; i++) {
+          const expense = updatedExpenses[i];
+          if (expense.id && !expense.isNew) {
+            console.log('Updating expense:', expense);
+            await ApiService.updateFinancialExpense(expense.id, expense);
           } else {
-            await ApiService.createFinancialExpense({
+            const payload = {
               user_id: user.id,
               profile_id: profileResponse.profile.id,
               ...expense
-            })
+            };
+            console.log('Creating expense:', payload);
+            const createdExpense = await ApiService.createFinancialExpense(payload);
+            updatedExpenses[i] = {
+              ...expense,
+              id: createdExpense.expense?.id || createdExpense.id,
+              isNew: false
+            };
           }
         }
+        setExpenses(updatedExpenses);
         
         // Save loans
-        for (const loan of loans) {
+        const updatedLoans = [...loans];
+        for (let i = 0; i < updatedLoans.length; i++) {
+          const loan = updatedLoans[i];
           if (loan.id && !loan.isNew) {
-            await ApiService.updateFinancialLoan(loan.id, { ...loan, description: loan.name })
-          } else if ((loan.name || loan.amount) && loan.isNew) {
-            await ApiService.createFinancialLoan({
+            const payload = { ...loan, name: loan.description };
+            console.log('Updating loan:', payload);
+            await ApiService.updateFinancialLoan(loan.id, payload);
+          } else if ((loan.description || loan.amount) && loan.isNew) {
+            const payload = {
               user_id: user.id,
               profile_id: profileResponse.profile.id,
-              description: loan.name,
+              name: loan.description,
               amount: loan.amount
-            })
+            };
+            console.log('Creating loan:', payload);
+            const createdLoan = await ApiService.createFinancialLoan(payload);
+            // Update the local loan with the returned id and clear isNew
+            updatedLoans[i] = {
+              ...loan,
+              id: createdLoan.loan?.id || createdLoan.id, // handle both possible response shapes
+              isNew: false
+            };
           }
         }
+        setLoans(updatedLoans);
         
         setSaveStatus('All changes saved');
         setTimeout(() => setSaveStatus(''), 2000);
@@ -363,9 +391,17 @@ function LifeSheetApp() {
     setGoals(updatedGoals)
   }
 
-  const removeGoal = (index) => {
-    const updatedGoals = goals.filter((_, i) => i !== index)
-    setGoals(updatedGoals)
+  const removeGoal = async (index) => {
+    const goalToRemove = goals[index];
+    if (goalToRemove.id) {
+      try {
+        await ApiService.deleteFinancialGoal(goalToRemove.id);
+      } catch (error) {
+        console.error('Failed to delete goal from backend:', error);
+      }
+    }
+    const updatedGoals = goals.filter((_, i) => i !== index);
+    setGoals(updatedGoals);
   }
 
   // Dynamic Expenses Management
@@ -384,23 +420,40 @@ function LifeSheetApp() {
     setExpenses(updatedExpenses)
   }
 
-  const removeExpense = (index) => {
-    const updatedExpenses = expenses.filter((_, i) => i !== index)
-    setExpenses(updatedExpenses)
+  const removeExpense = async (index) => {
+    const expenseToRemove = expenses[index];
+    if (expenseToRemove.id) {
+      try {
+        await ApiService.deleteFinancialExpense(expenseToRemove.id);
+      } catch (error) {
+        console.error('Failed to delete expense from backend:', error);
+      }
+    }
+    const updatedExpenses = expenses.filter((_, i) => i !== index);
+    setExpenses(updatedExpenses);
   }
 
   // 2. Add loan CRUD handlers using backend
   const addLoan = () => {
-    setLoans([...loans, { description: '', amount: 0 }])
+    setLoans([...loans, { description: '', amount: 0, isNew: true }]);
   }
   const updateLoan = (index, field, value) => {
     const updatedLoans = [...loans]
     updatedLoans[index] = { ...updatedLoans[index], [field]: value }
     setLoans(updatedLoans)
   }
-  const removeLoan = (index) => {
-    const updatedLoans = loans.filter((_, i) => i !== index)
-    setLoans(updatedLoans)
+  const removeLoan = async (index) => {
+    const loanToRemove = loans[index];
+    if (loanToRemove.id) {
+      try {
+        await ApiService.deleteFinancialLoan(loanToRemove.id);
+      } catch (error) {
+        console.error('Failed to delete loan from backend:', error);
+        // Optionally, show an error to the user here
+      }
+    }
+    const updatedLoans = loans.filter((_, i) => i !== index);
+    setLoans(updatedLoans);
   }
 
   const formatCurrency = (amount) => {
@@ -575,8 +628,11 @@ function LifeSheetApp() {
                         <Input
                           type="number"
                           placeholder="Loan Amount"
-                          value={loan.amount}
-                          onChange={e => updateLoan(idx, 'amount', parseFloat(e.target.value) || 0)}
+                          value={loan.amount === "" ? "" : loan.amount}
+                          onChange={e => {
+                            const val = e.target.value;
+                            updateLoan(idx, 'amount', val === "" ? "" : parseFloat(val));
+                          }}
                           className="w-1/2"
                           onBlur={() => isAuthenticated && saveFinancialData()}
                         />
@@ -640,8 +696,11 @@ function LifeSheetApp() {
                       <Input
                         type="number"
                         placeholder="Goal amount"
-                        value={goal.amount || ''}
-                        onChange={(e) => updateGoal(index, 'amount', parseFloat(e.target.value) || 0)}
+                        value={goal.amount === "" ? "" : goal.amount}
+                        onChange={e => {
+                          const val = e.target.value;
+                          updateGoal(index, 'amount', val === "" ? "" : parseFloat(val));
+                        }}
                         className="text-sm"
                         onBlur={() => isAuthenticated && saveFinancialData()}
                       />
@@ -695,8 +754,11 @@ function LifeSheetApp() {
                       <Input
                         type="number"
                         placeholder="Annual expense amount"
-                        value={expense.amount || ''}
-                        onChange={(e) => updateExpense(index, 'amount', parseFloat(e.target.value) || 0)}
+                        value={expense.amount === "" ? "" : expense.amount}
+                        onChange={e => {
+                          const val = e.target.value;
+                          updateExpense(index, 'amount', val === "" ? "" : parseFloat(val));
+                        }}
                         className="text-sm"
                         onBlur={() => isAuthenticated && saveFinancialData()}
                       />
