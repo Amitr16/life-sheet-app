@@ -239,7 +239,7 @@ function LifeSheetApp() {
         for (let i = 0; i < updatedLoans.length; i++) {
           const loan = updatedLoans[i];
           if (loan.id && !loan.isNew) {
-            const payload = { ...loan, name: loan.description };
+            const payload = { ...loan, name: loan.description, emi: loan.emi === '' ? null : loan.emi };
             console.log('Updating loan:', payload);
             await ApiService.updateFinancialLoan(loan.id, payload);
           } else if ((loan.description || loan.amount) && loan.isNew) {
@@ -247,7 +247,8 @@ function LifeSheetApp() {
               user_id: user.id,
               profile_id: profileResponse.profile.id,
               name: loan.description,
-              amount: loan.amount
+              amount: loan.amount,
+              emi: loan.emi === '' ? null : loan.emi
             };
             console.log('Creating loan:', payload);
             const createdLoan = await ApiService.createFinancialLoan(payload);
@@ -357,26 +358,26 @@ function LifeSheetApp() {
 
   const generateChartData = (age, currentIncome, assets, lifespan, growthRate) => {
     const workTenure = parseInt(formData.workTenureYears) || 0;
+    const annualExpense = expenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0);
+    const totalEmi = loans.reduce((sum, loan) => sum + (parseFloat(loan.emi) || 0), 0);
     const data = [];
     const currentYear = new Date().getFullYear();
-    let income = currentIncome || 0;
+    let cumulativeEarnings = 0;
     for (let year = 0; year <= (lifespan - age); year++) {
-      let incomeValue = null;
-      if (currentIncome) {
-        if (workTenure > 0) {
-          incomeValue = year < workTenure ? Math.round(income) : 0;
-        } else {
-          incomeValue = year === 0 ? Math.round(income) : 0;
-        }
+      // Add annual earnings only for active years
+      if (year < workTenure) {
+        cumulativeEarnings += currentIncome || 0;
       }
+      // Asset value for this year
+      const assetValue =
+        (parseFloat(assets) || 0)
+        + cumulativeEarnings
+        - ((annualExpense + totalEmi) * (year));
       data.push({
         year: currentYear + year,
         age: age + year,
-        income: incomeValue
+        asset: Math.round(assetValue)
       });
-      if (workTenure > 0 && year < workTenure) {
-        income = income * (1 + growthRate);
-      }
     }
     setChartData(data);
   }
@@ -443,7 +444,7 @@ function LifeSheetApp() {
   const addLoan = () => {
     setLoans([
       ...loans,
-      { description: '', amount: '', isNew: true }
+      { description: '', amount: '', emi: '', isNew: true }
     ]);
   }
 
@@ -640,7 +641,7 @@ function LifeSheetApp() {
                           placeholder={`Loan ${idx + 1} Name`}
                           value={loan.description || ''}
                           onChange={e => updateLoan(loan.id ?? idx, 'description', e.target.value)}
-                          className="w-1/2"
+                          className="w-1/3"
                           onBlur={() => isAuthenticated && saveFinancialData()}
                         />
                         <Input
@@ -651,7 +652,18 @@ function LifeSheetApp() {
                             const val = e.target.value;
                             updateLoan(loan.id ?? idx, 'amount', val === "" ? "" : parseFloat(val));
                           }}
-                          className="w-1/2"
+                          className="w-1/3"
+                          onBlur={() => isAuthenticated && saveFinancialData()}
+                        />
+                        <Input
+                          type="number"
+                          placeholder="EMI"
+                          value={loan.emi === undefined ? '' : loan.emi}
+                          onChange={e => {
+                            const val = e.target.value;
+                            updateLoan(loan.id ?? idx, 'emi', val === '' ? '' : parseFloat(val));
+                          }}
+                          className="w-1/3"
                           onBlur={() => isAuthenticated && saveFinancialData()}
                         />
                         <Button
@@ -889,7 +901,7 @@ function LifeSheetApp() {
                         formatter={(value, name) => [formatCurrency(value), name]}
                         labelFormatter={(label) => `Year: ${label}`}
                       />
-                      <Bar dataKey="income" fill="#10B981" />
+                      <Bar dataKey="asset" fill="#10B981" />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
